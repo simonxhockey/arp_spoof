@@ -15,73 +15,44 @@ void get_my_dev(u_int8_t *ether, u_int8_t *ip, char *dev){
 	memcpy(ip,&(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr), 4*sizeof(*ip));
 }
 
-/* make and send a arp reply packet for sender */
-void send_arp_rep(pcap_t *handle, u_int8_t *ip, struct objective_list *list, u_int8_t *my_mac){
-	struct make_arp arp_p;
+void send_arp(pcap_t *handle, u_int8_t *ether_dhost, u_int8_t *target_mac, u_int8_t *target_ip, u_int8_t *source_ip, u_int8_t *my_mac , int type){
+	u_char packet[50];
+
+	struct arp_packet *arp_p = (struct arp_packet *)packet;
+
+	memcpy(arp_p->ether_dhost, ether_dhost, 6);
+	memcpy(arp_p->ether_shost, my_mac, 6);
+	arp_p->ether_type = htons(ETHERTYPE_ARP);
+
+	arp_p->ar_hrd = htons(ARPHRD_ETHER);
+	arp_p->ar_pro = htons(ETHERTYPE_IP);
+	arp_p->ar_hln = 0x06;
+	arp_p->ar_pln = 0x04;
+	if (type == 1) arp_p->ar_op = htons(ARPOP_REQUEST);
+	else arp_p->ar_op = htons(ARPOP_REPLY);
+
+	memcpy(arp_p->arp_sha, my_mac, 6);
+	memcpy(arp_p->arp_spa, source_ip, 4);
+	memcpy(arp_p->arp_tha, target_mac, 6);
+	memcpy(arp_p->arp_tpa, target_ip, 4);
 	
-	memcpy(arp_p.eth_hdr.ether_dhost, list->sender_mac, 6);
-	memcpy(arp_p.eth_hdr.ether_shost, my_mac, 6);
-	arp_p.eth_hdr.ether_type = htons(ETHERTYPE_ARP);
-	
-	arp_p.arp_hdr.ar_hrd = htons(ARPHRD_ETHER);
-	arp_p.arp_hdr.ar_pro = htons(ETHERTYPE_IP);
-	arp_p.arp_hdr.ar_hln = 0x06;
-	arp_p.arp_hdr.ar_pln = 0x04;	
-	arp_p.arp_hdr.ar_op = htons(ARPOP_REPLY);
-	
-	memcpy(arp_p.arp_hdr.arp_sha, my_mac, 6);
-	memcpy(arp_p.arp_hdr.arp_spa, list->receiver_ip, 4);
-	memcpy(arp_p.arp_hdr.arp_tha, list->sender_mac, 6);
-	memcpy(arp_p.arp_hdr.arp_tpa, ip, 4);
-													
-	pcap_sendpacket(handle, (u_char *)&arp_p, 42);
+	pcap_sendpacket(handle, (u_char*)packet, 42);
 }
 
-/* make and send a arp request packet to sender and receiver */
-void send_arp_req(pcap_t *handle, u_int8_t *ip, struct objective_list *list, u_int8_t *my_mac, u_int8_t *my_ip, int type){
-	struct make_arp arp_p;
-	u_int8_t broadcast_ether[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	u_int8_t none_ether[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-	memcpy(arp_p.eth_hdr.ether_dhost, broadcast_ether, 6);
-	memcpy(arp_p.eth_hdr.ether_shost, my_mac, 6);
-	arp_p.eth_hdr.ether_type = htons(ETHERTYPE_ARP);
-								 
-	arp_p.arp_hdr.ar_hrd = htons(ARPHRD_ETHER);
-	arp_p.arp_hdr.ar_pro = htons(ETHERTYPE_IP);
-	arp_p.arp_hdr.ar_hln = 0x06;
-	arp_p.arp_hdr.ar_pln = 0x04;
-	arp_p.arp_hdr.ar_op = htons(ARPOP_REQUEST);
-													
-	memcpy(arp_p.arp_hdr.arp_sha, my_mac, 6);
-	memcpy(arp_p.arp_hdr.arp_spa, my_ip, 4);
-	memcpy(arp_p.arp_hdr.arp_tha, none_ether, 6);
-	memcpy(arp_p.arp_hdr.arp_tpa, ip, 4);
-													 
-	pcap_sendpacket(handle, (u_char *)&arp_p, 42);
-
-	struct ethernet_header *tmp_eth;
-	struct arp_header *tmp_arp;
-													 
+void get_the_mac(pcap_t *handle, u_int8_t *target_ip, u_int8_t *mac_to_know){
 	while(1){
 		struct pcap_pkthdr* header;
 		const u_char* packet;
-		
+
 		int res = pcap_next_ex(handle, &header, &packet);
 		if (res == 0 || res == -1 || res == -2) continue;
+
+		struct arp_packet *tmp_p = (struct arp_packet *)packet;
+
+		if (ntohs(tmp_p->ether_type) != ETHERTYPE_ARP) continue;
+		if (ntohs(tmp_p->ar_op) != ARPOP_REPLY) continue;
 		
-		tmp_eth = (struct ethernet_header *)packet;
-		if (ntohs(tmp_eth->ether_type) != ETHERTYPE_ARP) continue;
-		
-		tmp_arp = (struct arp_header *)(packet + sizeof(ethernet_header));
-		if (tmp_arp->arp_spa == arp_p.arp_hdr.arp_tpa){
-			if(type == 1)  // get mac of sender
-				memcpy(list->sender_mac, tmp_arp->arp_sha, 6);
-			else  // get mac of receiver
-				memcpy(list->receiver_mac, tmp_arp->arp_sha, 6);	
-			break;
-		}
+		memcpy(mac_to_know, tmp_p->ether_shost, 6);
+		break;
 	}
 }
-
-

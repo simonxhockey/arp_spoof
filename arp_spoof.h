@@ -34,10 +34,20 @@ struct arp_header {
 	u_int8_t arp_tpa[4];
 };
 
-/* arp packet structure */
-struct make_arp {
-	struct ethernet_header eth_hdr;
-	struct arp_header arp_hdr;
+struct arp_packet {
+	u_int8_t ether_dhost[6];
+	u_int8_t ether_shost[6];
+	u_int16_t ether_type;
+
+	u_int16_t ar_hrd;
+	u_int16_t ar_pro;
+	u_int8_t ar_hln;
+	u_int8_t ar_pln;
+	u_int16_t ar_op;
+	u_int8_t arp_sha[6];
+	u_int8_t arp_spa[4];
+	u_int8_t arp_tha[6];
+	u_int8_t arp_tpa[4];
 };
 
 /*
@@ -53,7 +63,6 @@ struct objective_list {
 
 void usage();
 void get_my_dev(u_int8_t *ether, u_int8_t *ip, char *dev);
-void send_arp_rep(pcap_t *handle, u_int8_t *ip, struct objective_list *list, u_int8_t *my_mac);
-void send_arp_req(pcap_t *handle, u_int8_t *ip, struct objective_list *list, u_int8_t *my_mac, u_int8_t *my_ip,int type);
-
+void send_arp(pcap_t *handle, u_int8_t *ether_dhost, u_int8_t *target_mac, u_int8_t *target_ip, u_int8_t *source_ip, u_int8_t *my_mac , int type);
+void get_the_mac(pcap_t *handle, u_int8_t *target_ip, u_int8_t *mac_to_know);
 
